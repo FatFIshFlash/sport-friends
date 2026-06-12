@@ -3,11 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-    <title>Спорт вместе — общая карта и чат (Firebase)</title>
-    <!-- Leaflet CSS -->
+    <title>Спорт вместе - расстояние до людей</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <!-- Firebase SDK (совместимая версия) -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
     <style>
@@ -29,6 +27,7 @@
         .user-info strong { font-size: 1rem; }
         .user-info div { font-size: 0.75rem; color: #555; }
         .contact-info { font-size: 0.7rem; background: #e9ecef; display: inline-block; padding: 2px 8px; border-radius: 20px; margin-top: 4px; }
+        .distance-badge { font-size: 0.7rem; background: #cfe2ff; display: inline-block; padding: 2px 8px; border-radius: 20px; margin-left: 6px; }
         .chat-btn { background: #0d6efd; border: none; color: white; padding: 4px 10px; border-radius: 30px; font-size: 0.7rem; cursor: pointer; margin: 2px; }
         .btn-copy { background: #28a745; }
         .message-text { background: white; padding: 8px; border-radius: 12px; margin: 5px 0; border-left: 3px solid #1e7e34; }
@@ -44,7 +43,7 @@
     </style>
 </head>
 <body>
-<header>🏃‍♂️ Спорт вместе · общая карта и чат (онлайн)</header>
+<header>🏃‍♂️ Спорт вместе - расстояние до людей</header>
 <div class="container">
     <div class="two-columns">
         <div class="left-col">
@@ -59,10 +58,10 @@
                         <option value="турники/воркаут">💪 Турники / воркаут</option>
                         <option value="велосипед">🚲 Велосипед</option>
                         <option value="йога/стретчинг">🧘 Йога / стретчинг</option>
-                        <option value="футбол/игры">⚽ Футбол / командные</option>
+                        <option value="футбол/игры">⚽ Футбол / командные игры</option>
                         <option value="другое">✨ Другое</option>
                     </select>
-                    <input type="text" id="userContact" placeholder="Контакт (телефон, email, соцсеть) — по желанию">
+                    <input type="text" id="userContact" placeholder="Контакт (телефон, email, соцсеть) - по желанию">
                     <div id="coordInfo" class="selected-coord">📍 Кликните на карте, чтобы выбрать место</div>
                     <div class="flex-buttons">
                         <button class="btn btn-outline" id="cancelAddBtn">Отмена</button>
@@ -70,7 +69,8 @@
                     </div>
                 </div>
                 <hr>
-                <div class="warning">📡 Данные обновляются автоматически. Все добавленные пользователи видны сразу всем.</div>
+                <button id="refreshDistBtn" class="btn btn-secondary">📏 Обновить расстояние (по моей позиции)</button>
+                <div class="warning">📡 Расстояние считается от вашей точки на карте. Если вы не добавили себя - воспользуйтесь кнопкой «Моё местоположение».</div>
             </div>
         </div>
         <div class="right-col">
@@ -90,11 +90,11 @@
             </div>
         </div>
     </div>
-    <footer>Кликните на карте, чтобы выбрать место при добавлении. Сообщения видны всем сразу.</footer>
+    <footer>Кликните на карте, чтобы выбрать место при добавлении. Расстояние до других считается автоматически.</footer>
 </div>
 
 <script>
-    // ========== ВАШИ ДАННЫЕ FIREBASE (ВСТАВЛЕНЫ) ==========
+    // ========== ВАШИ ДАННЫЕ FIREBASE (ЗАМЕНИТЕ НА СВОИ, ЕСЛИ ЕЩЁ НЕТ) ==========
     const firebaseConfig = {
         apiKey: "AIzaSyBS7zOIjcXrR5Ti1dDifqOlKWe4HYNLrSg",
         authDomain: "sport-friends-rus.firebaseapp.com",
@@ -103,13 +103,11 @@
         messagingSenderId: "1087233318718",
         appId: "1:1087233318718:web:0bb5de93b39843b1c1566f"
     };
-    // ===================================================
+    // ====================================================================
 
-    // Инициализация Firebase
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
-    // Карта
     let map = L.map('map').setView([55.7558, 37.6176], 12);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; OpenStreetMap',
@@ -126,6 +124,30 @@
     let messages = [];
     let markers = [];
 
+    // Функция расстояния (в километрах, метрах)
+    function haversineDistance(lat1, lon1, lat2, lon2) {
+        const R = 6371;
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2)**2;
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        return R * c;
+    }
+
+    function formatDistance(km) {
+        if (km < 0.1) return `${Math.round(km * 1000)} м`;
+        return `${km.toFixed(1)} км`;
+    }
+
+    // Получить координаты текущего пользователя (если он есть)
+    function getCurrentUserCoords() {
+        const currentUser = users.find(u => u.id === currentUserId);
+        if (currentUser && currentUser.lat && currentUser.lng) {
+            return { lat: currentUser.lat, lng: currentUser.lng };
+        }
+        return null;
+    }
+
     function loadCurrentUserId() {
         const saved = localStorage.getItem('sport_current_user_id');
         if (saved) currentUserId = saved;
@@ -135,7 +157,6 @@
         localStorage.setItem('sport_current_user_id', id);
     }
 
-    // Подписка на коллекцию users
     function subscribeUsers() {
         db.collection('users').onSnapshot(snapshot => {
             users = [];
@@ -147,7 +168,6 @@
         });
     }
 
-    // Подписка на сообщения
     function subscribeMessages() {
         db.collection('messages').orderBy('timestamp', 'asc').onSnapshot(snapshot => {
             messages = [];
@@ -165,6 +185,7 @@
             return;
         }
         container.innerHTML = '';
+        const myCoords = getCurrentUserCoords();
         users.forEach(user => {
             let sportEmoji = '🏋️';
             if (user.sport.includes('бег')) sportEmoji = '🏃';
@@ -175,21 +196,33 @@
             else sportEmoji = '🤸';
             const contactHtml = user.contact ? `<div class="contact-info">📞 ${escapeHtml(user.contact)}</div>` : '';
             const copyBtn = user.contact ? `<button class="chat-btn btn-copy" data-contact="${escapeHtml(user.contact)}">📋 Копировать контакт</button>` : '';
+            // Расстояние
+            let distanceHtml = '';
+            if (myCoords && user.lat && user.lng) {
+                const distKm = haversineDistance(myCoords.lat, myCoords.lng, user.lat, user.lng);
+                distanceHtml = `<span class="distance-badge">📏 ${formatDistance(distKm)}</span>`;
+            }
+            // Кнопка удаления - только для своего профиля
+            const deleteBtn = (currentUserId === user.id) ? `<button class="chat-btn" style="background:#dc3545;" data-id="${user.id}">❌ Удалить</button>` : '';
+            
             const div = document.createElement('div');
             div.className = 'user-item';
             div.innerHTML = `
                 <div class="user-info">
-                    <strong>${escapeHtml(user.name)}</strong>, ${user.age} лет   ${sportEmoji} ${user.sport}
+                    <strong>${escapeHtml(user.name)}</strong>, ${user.age} лет   ${sportEmoji} ${user.sport}
+                    ${distanceHtml}
                     ${contactHtml}
                     <div>📍 ${user.lat.toFixed(4)}, ${user.lng.toFixed(4)}</div>
                 </div>
                 <div style="display:flex; gap:6px; flex-wrap:wrap;">
                     <button class="chat-btn" data-lat="${user.lat}" data-lng="${user.lng}" data-name="${escapeHtml(user.name)}">🗺️ Показать</button>
                     ${copyBtn}
+                    ${deleteBtn}
                 </div>
             `;
             container.appendChild(div);
         });
+        // Обработчики
         document.querySelectorAll('.chat-btn[data-lat]').forEach(btn => {
             btn.addEventListener('click', () => {
                 let lat = parseFloat(btn.dataset.lat), lng = parseFloat(btn.dataset.lng), name = btn.dataset.name;
@@ -202,6 +235,35 @@
                 e.stopPropagation();
                 let contact = btn.dataset.contact;
                 if (contact) navigator.clipboard.writeText(contact).then(() => alert('Контакт скопирован')).catch(() => alert('Ошибка'));
+            });
+        });
+        document.querySelectorAll('.chat-btn[data-id]').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                if (confirm('Удалить свой профиль? Это действие нельзя отменить.')) {
+                    const userId = btn.dataset.id;
+                    if (userId === currentUserId) {
+                        try {
+                            await db.collection('users').doc(userId).delete();
+                            // Также удаляем все сообщения этого пользователя (по желанию)
+                            const batch = db.batch();
+                            const userMessages = messages.filter(m => m.user_id === userId);
+                            userMessages.forEach(msg => {
+                                const msgRef = db.collection('messages').doc(msg.id);
+                                batch.delete(msgRef);
+                            });
+                            await batch.commit();
+                            localStorage.removeItem('sport_current_user_id');
+                            currentUserId = null;
+                            alert('Ваш профиль и сообщения удалены.');
+                            window.location.reload(); // простая перезагрузка
+                        } catch(e) {
+                            console.error(e);
+                            alert('Ошибка при удалении');
+                        }
+                    } else {
+                        alert('Вы можете удалить только свой профиль.');
+                    }
+                }
             });
         });
     }
@@ -306,7 +368,7 @@
             currentMarker = null;
         } catch (e) {
             console.error(e);
-            alert('Ошибка при сохранении. Проверьте правила Firestore (должны быть read/write true).');
+            alert('Ошибка при сохранении. Проверьте правила Firestore.');
         }
     };
 
@@ -358,7 +420,17 @@
         }
     };
 
-    // Геолокация
+    // Обновить расстояния (принудительно, если изменилась геопозиция)
+    document.getElementById('refreshDistBtn').onclick = () => {
+        if (!currentUserId) {
+            alert('Вы не добавили себя. Расстояния будут считаться после добавления.');
+            return;
+        }
+        // просто перерисовываем список
+        renderUsersList();
+    };
+
+    // Геолокация для карты
     const locBtn = document.createElement('button');
     locBtn.innerText = '📍 Моё местоположение';
     locBtn.className = 'btn btn-secondary';
