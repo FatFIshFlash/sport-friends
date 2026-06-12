@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>Спорт вместе — общая карта и чат (Firebase)</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Firebase SDK (совместимая версия) -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: system-ui, 'Segoe UI', Roboto, sans-serif; background: #f0f2f5; }
+        header { background: #1e7e34; color: white; padding: 12px 16px; text-align: center; font-weight: bold; font-size: 1.3rem; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 12px; }
+        .two-columns { display: flex; gap: 16px; flex-wrap: wrap; }
+        .left-col { flex: 2; min-width: 280px; }
+        .right-col { flex: 1.5; min-width: 260px; }
+        .card { background: white; border-radius: 20px; padding: 16px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+        #map { height: 350px; border-radius: 20px; z-index: 1; }
+        .btn { background: #1e7e34; border: none; color: white; padding: 10px 16px; border-radius: 40px; font-size: 0.9rem; font-weight: bold; cursor: pointer; margin-top: 8px; width: 100%; }
+        .btn-secondary { background: #6c757d; }
+        .btn-outline { background: white; border: 1px solid #1e7e34; color: #1e7e34; }
+        .flex-buttons { display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+        .user-list, .message-list { max-height: 300px; overflow-y: auto; margin-bottom: 12px; }
+        .user-item, .message-item { background: #f8f9fa; border-radius: 16px; padding: 10px; margin-bottom: 8px; }
+        .user-info strong { font-size: 1rem; }
+        .user-info div { font-size: 0.75rem; color: #555; }
+        .contact-info { font-size: 0.7rem; background: #e9ecef; display: inline-block; padding: 2px 8px; border-radius: 20px; margin-top: 4px; }
+        .chat-btn { background: #0d6efd; border: none; color: white; padding: 4px 10px; border-radius: 30px; font-size: 0.7rem; cursor: pointer; margin: 2px; }
+        .btn-copy { background: #28a745; }
+        .message-text { background: white; padding: 8px; border-radius: 12px; margin: 5px 0; border-left: 3px solid #1e7e34; }
+        .message-meta { font-size: 0.65rem; color: #6c757d; margin-bottom: 4px; }
+        .add-panel, .message-panel { background: #e9ecef; border-radius: 20px; padding: 12px; margin-top: 12px; display: none; }
+        .add-panel input, .add-panel select, .message-panel textarea { width: 100%; padding: 8px; margin: 6px 0; border-radius: 30px; border: 1px solid #ccc; }
+        .message-panel textarea { border-radius: 16px; resize: vertical; }
+        .warning { font-size: 0.7rem; color: #6c757d; text-align: center; margin-top: 8px; }
+        footer { text-align: center; font-size: 0.7rem; color: #6c757d; margin: 20px 0; }
+        .leaflet-control-attribution { display: none; }
+        hr { margin: 12px 0; }
+        @media (max-width: 700px) { .two-columns { flex-direction: column; } }
+    </style>
+</head>
+<body>
+<header>🏃‍♂️ Спорт вместе · общая карта и чат (онлайн)</header>
+<div class="container">
+    <div class="two-columns">
+        <div class="left-col">
+            <div class="card">
+                <div id="map"></div>
+                <button class="btn" id="addMeBtn">➕ Добавить себя на карту</button>
+                <div id="addPanel" class="add-panel">
+                    <input type="text" id="userName" placeholder="Ваше имя (ник)">
+                    <input type="number" id="userAge" placeholder="Возраст">
+                    <select id="userSport">
+                        <option value="бег">🏃 Бег</option>
+                        <option value="турники/воркаут">💪 Турники / воркаут</option>
+                        <option value="велосипед">🚲 Велосипед</option>
+                        <option value="йога/стретчинг">🧘 Йога / стретчинг</option>
+                        <option value="футбол/игры">⚽ Футбол / командные</option>
+                        <option value="другое">✨ Другое</option>
+                    </select>
+                    <input type="text" id="userContact" placeholder="Контакт (телефон, email, соцсеть) — по желанию">
+                    <div id="coordInfo" class="selected-coord">📍 Кликните на карте, чтобы выбрать место</div>
+                    <div class="flex-buttons">
+                        <button class="btn btn-outline" id="cancelAddBtn">Отмена</button>
+                        <button class="btn" id="saveUserBtn">Сохранить</button>
+                    </div>
+                </div>
+                <hr>
+                <div class="warning">📡 Данные обновляются автоматически. Все добавленные пользователи видны сразу всем.</div>
+            </div>
+        </div>
+        <div class="right-col">
+            <div class="card">
+                <h3 style="margin:0 0 8px 0">👥 Люди</h3>
+                <div id="usersList" class="user-list">Загрузка...</div>
+                <h3 style="margin:16px 0 8px 0">💬 Лента сообщений</h3>
+                <div id="messageList" class="message-list"></div>
+                <button class="btn" id="newMessageBtn">✏️ Написать сообщение</button>
+                <div id="messagePanel" class="message-panel">
+                    <textarea id="messageText" rows="2" placeholder="Ваше сообщение... (например, «Бегаю завтра в 19:00 у стадиона, кто со мной?»)"></textarea>
+                    <div class="flex-buttons">
+                        <button class="btn btn-outline" id="cancelMsgBtn">Отмена</button>
+                        <button class="btn" id="sendMsgBtn">Отправить</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <footer>Кликните на карте, чтобы выбрать место при добавлении. Сообщения видны всем сразу.</footer>
+</div>
+
+<script>
+    // ========== ВАШИ ДАННЫЕ FIREBASE (ВСТАВЛЕНЫ) ==========
+    const firebaseConfig = {
+        apiKey: "AIzaSyBS7zOIjcXrR5Ti1dDifqOlKWe4HYNLrSg",
+        authDomain: "sport-friends-rus.firebaseapp.com",
+        projectId: "sport-friends-rus",
+        storageBucket: "sport-friends-rus.firebasestorage.app",
+        messagingSenderId: "1087233318718",
+        appId: "1:1087233318718:web:0bb5de93b39843b1c1566f"
+    };
+    // ===================================================
+
+    // Инициализация Firebase
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    // Карта
+    let map = L.map('map').setView([55.7558, 37.6176], 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap',
+        subdomains: 'abc',
+        maxZoom: 19
+    }).addTo(map);
+    setTimeout(() => {
+        let att = document.querySelector('.leaflet-control-attribution');
+        if(att) att.style.display = 'none';
+    }, 100);
+
+    let currentUserId = null;
+    let users = [];
+    let messages = [];
+    let markers = [];
+
+    function loadCurrentUserId() {
+        const saved = localStorage.getItem('sport_current_user_id');
+        if (saved) currentUserId = saved;
+    }
+    function saveCurrentUserId(id) {
+        currentUserId = id;
+        localStorage.setItem('sport_current_user_id', id);
+    }
+
+    // Подписка на коллекцию users
+    function subscribeUsers() {
+        db.collection('users').onSnapshot(snapshot => {
+            users = [];
+            snapshot.forEach(doc => {
+                users.push({ id: doc.id, ...doc.data() });
+            });
+            renderUsersList();
+            renderMarkers();
+        });
+    }
+
+    // Подписка на сообщения
+    function subscribeMessages() {
+        db.collection('messages').orderBy('timestamp', 'asc').onSnapshot(snapshot => {
+            messages = [];
+            snapshot.forEach(doc => {
+                messages.push({ id: doc.id, ...doc.data() });
+            });
+            renderMessages();
+        });
+    }
+
+    function renderUsersList() {
+        const container = document.getElementById('usersList');
+        if (!users.length) {
+            container.innerHTML = '<div style="text-align:center; padding:20px;">👋 Пока никого нет. Добавьте себя!</div>';
+            return;
+        }
+        container.innerHTML = '';
+        users.forEach(user => {
+            let sportEmoji = '🏋️';
+            if (user.sport.includes('бег')) sportEmoji = '🏃';
+            else if (user.sport.includes('турник')) sportEmoji = '💪';
+            else if (user.sport.includes('вело')) sportEmoji = '🚲';
+            else if (user.sport.includes('йога')) sportEmoji = '🧘';
+            else if (user.sport.includes('футбол')) sportEmoji = '⚽';
+            else sportEmoji = '🤸';
+            const contactHtml = user.contact ? `<div class="contact-info">📞 ${escapeHtml(user.contact)}</div>` : '';
+            const copyBtn = user.contact ? `<button class="chat-btn btn-copy" data-contact="${escapeHtml(user.contact)}">📋 Копировать контакт</button>` : '';
+            const div = document.createElement('div');
+            div.className = 'user-item';
+            div.innerHTML = `
+                <div class="user-info">
+                    <strong>${escapeHtml(user.name)}</strong>, ${user.age} лет   ${sportEmoji} ${user.sport}
+                    ${contactHtml}
+                    <div>📍 ${user.lat.toFixed(4)}, ${user.lng.toFixed(4)}</div>
+                </div>
+                <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                    <button class="chat-btn" data-lat="${user.lat}" data-lng="${user.lng}" data-name="${escapeHtml(user.name)}">🗺️ Показать</button>
+                    ${copyBtn}
+                </div>
+            `;
+            container.appendChild(div);
+        });
+        document.querySelectorAll('.chat-btn[data-lat]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                let lat = parseFloat(btn.dataset.lat), lng = parseFloat(btn.dataset.lng), name = btn.dataset.name;
+                map.setView([lat, lng], 15);
+                L.popup().setLatLng([lat, lng]).setContent(`📍 ${name}`).openOn(map);
+            });
+        });
+        document.querySelectorAll('.btn-copy').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                let contact = btn.dataset.contact;
+                if (contact) navigator.clipboard.writeText(contact).then(() => alert('Контакт скопирован')).catch(() => alert('Ошибка'));
+            });
+        });
+    }
+
+    function renderMessages() {
+        const container = document.getElementById('messageList');
+        if (!messages.length) {
+            container.innerHTML = '<div style="text-align:center; padding:20px;">💬 Пока нет сообщений. Напишите первое!</div>';
+            return;
+        }
+        container.innerHTML = '';
+        messages.forEach(msg => {
+            const date = new Date(msg.timestamp).toLocaleString();
+            const div = document.createElement('div');
+            div.className = 'message-item';
+            div.innerHTML = `
+                <div class="message-meta"><strong>${escapeHtml(msg.user_name)}</strong> · ${date}</div>
+                <div class="message-text">${escapeHtml(msg.text)}</div>
+            `;
+            container.appendChild(div);
+        });
+    }
+
+    function renderMarkers() {
+        markers.forEach(m => map.removeLayer(m));
+        markers = [];
+        users.forEach(user => {
+            let m = L.marker([user.lat, user.lng]).addTo(map);
+            let contactText = user.contact ? `\n📞 ${user.contact}` : '';
+            m.bindPopup(`<b>${escapeHtml(user.name)}</b> (${user.age})<br>${user.sport}${contactText}`);
+            markers.push(m);
+        });
+    }
+
+    function escapeHtml(str) {
+        if(!str) return '';
+        return str.replace(/[&<>]/g, m => m === '&' ? '&amp;' : m === '<' ? '&lt;' : '&gt;');
+    }
+
+    // Добавление пользователя
+    let selectedLat = null, selectedLng = null, currentMarker = null;
+    let addingMode = false;
+    function enableAddingMode() {
+        addingMode = true;
+        document.getElementById('addPanel').style.display = 'block';
+        document.getElementById('addMeBtn').style.display = 'none';
+        if (currentMarker) map.removeLayer(currentMarker);
+        selectedLat = null; selectedLng = null;
+        document.getElementById('coordInfo').innerText = '📍 Кликните на карте, чтобы выбрать место';
+        map.off('click');
+        map.on('click', (e) => {
+            if (!addingMode) return;
+            selectedLat = e.latlng.lat;
+            selectedLng = e.latlng.lng;
+            if (currentMarker) map.removeLayer(currentMarker);
+            currentMarker = L.marker([selectedLat, selectedLng]).addTo(map);
+            currentMarker.bindPopup('📍 Ваше место').openPopup();
+            document.getElementById('coordInfo').innerText = `✅ Место: ${selectedLat.toFixed(5)}, ${selectedLng.toFixed(5)}`;
+        });
+    }
+    function disableAddingMode() {
+        addingMode = false;
+        document.getElementById('addPanel').style.display = 'none';
+        document.getElementById('addMeBtn').style.display = 'block';
+        if (currentMarker) map.removeLayer(currentMarker);
+        map.off('click');
+        selectedLat = null;
+    }
+    document.getElementById('addMeBtn').onclick = enableAddingMode;
+    document.getElementById('cancelAddBtn').onclick = disableAddingMode;
+    document.getElementById('saveUserBtn').onclick = async () => {
+        let name = document.getElementById('userName').value.trim();
+        let age = document.getElementById('userAge').value;
+        let sport = document.getElementById('userSport').value;
+        let contact = document.getElementById('userContact').value.trim();
+        if (!name || !age || !selectedLat || !selectedLng) {
+            alert('Заполните имя, возраст и выберите место на карте');
+            return;
+        }
+        if (isNaN(age) || age < 14 || age > 100) {
+            alert('Возраст от 14 до 100');
+            return;
+        }
+        const newUser = {
+            name: name,
+            age: parseInt(age),
+            sport: sport,
+            contact: contact,
+            lat: selectedLat,
+            lng: selectedLng,
+            created_at: Date.now()
+        };
+        try {
+            const docRef = await db.collection('users').add(newUser);
+            saveCurrentUserId(docRef.id);
+            alert('Вы добавлены! Теперь можете писать сообщения.');
+            disableAddingMode();
+            document.getElementById('userName').value = '';
+            document.getElementById('userAge').value = '';
+            document.getElementById('userContact').value = '';
+            if (currentMarker) map.removeLayer(currentMarker);
+            currentMarker = null;
+        } catch (e) {
+            console.error(e);
+            alert('Ошибка при сохранении. Проверьте правила Firestore (должны быть read/write true).');
+        }
+    };
+
+    // Отправка сообщения
+    let messageMode = false;
+    function enableMessageMode() {
+        if (!currentUserId) {
+            alert('Сначала добавьте себя на карту (кнопка «Добавить себя»).');
+            return;
+        }
+        messageMode = true;
+        document.getElementById('messagePanel').style.display = 'block';
+        document.getElementById('newMessageBtn').style.display = 'none';
+    }
+    function disableMessageMode() {
+        messageMode = false;
+        document.getElementById('messagePanel').style.display = 'none';
+        document.getElementById('newMessageBtn').style.display = 'block';
+        document.getElementById('messageText').value = '';
+    }
+    document.getElementById('newMessageBtn').onclick = enableMessageMode;
+    document.getElementById('cancelMsgBtn').onclick = disableMessageMode;
+    document.getElementById('sendMsgBtn').onclick = async () => {
+        let text = document.getElementById('messageText').value.trim();
+        if (!text) { alert('Введите текст сообщения'); return; }
+        if (!currentUserId) {
+            alert('Не удалось определить вашу учётную запись. Добавьте себя заново.');
+            return;
+        }
+        const currentUser = users.find(u => u.id === currentUserId);
+        if (!currentUser) {
+            alert('Ваш профиль не найден. Возможно, вы были удалены. Добавьте себя ещё раз.');
+            return;
+        }
+        const newMsg = {
+            user_id: currentUserId,
+            user_name: currentUser.name,
+            text: text,
+            timestamp: Date.now(),
+            lat: currentUser.lat,
+            lng: currentUser.lng
+        };
+        try {
+            await db.collection('messages').add(newMsg);
+            disableMessageMode();
+        } catch (e) {
+            console.error(e);
+            alert('Ошибка при отправке сообщения');
+        }
+    };
+
+    // Геолокация
+    const locBtn = document.createElement('button');
+    locBtn.innerText = '📍 Моё местоположение';
+    locBtn.className = 'btn btn-secondary';
+    locBtn.style.marginTop = '8px';
+    document.querySelector('#map').after(locBtn);
+    locBtn.onclick = () => {
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(pos => {
+                map.setView([pos.coords.latitude, pos.coords.longitude], 15);
+                L.popup().setLatLng([pos.coords.latitude, pos.coords.longitude]).setContent('Вы здесь').openOn(map);
+            }, () => alert('Не удалось определить местоположение'));
+        } else alert('Геолокация не поддерживается');
+    };
+
+    loadCurrentUserId();
+    subscribeUsers();
+    subscribeMessages();
+</script>
+</body>
+</html>
