@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-    <title>Спорт вместе - расстояние до людей</title>
+    <title>Спорт вместе — подробные профили</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
@@ -33,17 +33,20 @@
         .message-text { background: white; padding: 8px; border-radius: 12px; margin: 5px 0; border-left: 3px solid #1e7e34; }
         .message-meta { font-size: 0.65rem; color: #6c757d; margin-bottom: 4px; }
         .add-panel, .message-panel { background: #e9ecef; border-radius: 20px; padding: 12px; margin-top: 12px; display: none; }
-        .add-panel input, .add-panel select, .message-panel textarea { width: 100%; padding: 8px; margin: 6px 0; border-radius: 30px; border: 1px solid #ccc; }
+        .add-panel input, .add-panel select, .add-panel textarea, .message-panel textarea { width: 100%; padding: 8px; margin: 6px 0; border-radius: 16px; border: 1px solid #ccc; font-family: inherit; }
         .message-panel textarea { border-radius: 16px; resize: vertical; }
         .warning { font-size: 0.7rem; color: #6c757d; text-align: center; margin-top: 8px; }
         footer { text-align: center; font-size: 0.7rem; color: #6c757d; margin: 20px 0; }
         .leaflet-control-attribution { display: none; }
         hr { margin: 12px 0; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000; }
+        .modal-content { background: white; max-width: 300px; width: 80%; border-radius: 20px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+        .modal-content p { white-space: pre-wrap; word-break: break-word; }
         @media (max-width: 700px) { .two-columns { flex-direction: column; } }
     </style>
 </head>
 <body>
-<header>🏃‍♂️ Спорт вместе - расстояние до людей</header>
+<header>🏃‍♂️ Спорт вместе · подробные профили</header>
 <div class="container">
     <div class="two-columns">
         <div class="left-col">
@@ -58,10 +61,11 @@
                         <option value="турники/воркаут">💪 Турники / воркаут</option>
                         <option value="велосипед">🚲 Велосипед</option>
                         <option value="йога/стретчинг">🧘 Йога / стретчинг</option>
-                        <option value="футбол/игры">⚽ Футбол / командные игры</option>
+                        <option value="футбол/игры">⚽ Футбол / командные</option>
                         <option value="другое">✨ Другое</option>
                     </select>
-                    <input type="text" id="userContact" placeholder="Контакт (телефон, email, соцсеть) - по желанию">
+                    <input type="text" id="userContact" placeholder="Контакт (телефон, email, соцсеть) — по желанию">
+                    <textarea id="userBio" rows="2" placeholder="О себе (подробно): например, «бегаю по вторникам и четвергам в 19:00 у пруда, темп 6 мин/км. Ищу компанию»"></textarea>
                     <div id="coordInfo" class="selected-coord">📍 Кликните на карте, чтобы выбрать место</div>
                     <div class="flex-buttons">
                         <button class="btn btn-outline" id="cancelAddBtn">Отмена</button>
@@ -70,7 +74,7 @@
                 </div>
                 <hr>
                 <button id="refreshDistBtn" class="btn btn-secondary">📏 Обновить расстояние (по моей позиции)</button>
-                <div class="warning">📡 Расстояние считается от вашей точки на карте. Если вы не добавили себя - воспользуйтесь кнопкой «Моё местоположение».</div>
+                <div class="warning">📡 Расстояние считается от вашей точки на карте. Если вы не добавили себя — воспользуйтесь кнопкой «Моё местоположение».</div>
             </div>
         </div>
         <div class="right-col">
@@ -90,11 +94,20 @@
             </div>
         </div>
     </div>
-    <footer>Кликните на карте, чтобы выбрать место при добавлении. Расстояние до других считается автоматически.</footer>
+    <footer>Кликните на карте, чтобы выбрать место при добавлении. Нажмите на маркер или на кнопку «📖 О себе» — увидите подробности.</footer>
+</div>
+
+<!-- Модальное окно для показа bio -->
+<div id="bioModal" class="modal">
+    <div class="modal-content">
+        <h4 id="modalName"></h4>
+        <p id="modalBio"></p>
+        <button class="btn btn-secondary" id="closeModalBtn" style="margin-top:10px;">Закрыть</button>
+    </div>
 </div>
 
 <script>
-    // ========== ВАШИ ДАННЫЕ FIREBASE (ЗАМЕНИТЕ НА СВОИ, ЕСЛИ ЕЩЁ НЕТ) ==========
+    // ========== ВАШИ ДАННЫЕ FIREBASE ==========
     const firebaseConfig = {
         apiKey: "AIzaSyBS7zOIjcXrR5Ti1dDifqOlKWe4HYNLrSg",
         authDomain: "sport-friends-rus.firebaseapp.com",
@@ -103,7 +116,7 @@
         messagingSenderId: "1087233318718",
         appId: "1:1087233318718:web:0bb5de93b39843b1c1566f"
     };
-    // ====================================================================
+    // =======================================
 
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
@@ -124,7 +137,6 @@
     let messages = [];
     let markers = [];
 
-    // Функция расстояния (в километрах, метрах)
     function haversineDistance(lat1, lon1, lat2, lon2) {
         const R = 6371;
         const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -139,12 +151,9 @@
         return `${km.toFixed(1)} км`;
     }
 
-    // Получить координаты текущего пользователя (если он есть)
     function getCurrentUserCoords() {
         const currentUser = users.find(u => u.id === currentUserId);
-        if (currentUser && currentUser.lat && currentUser.lng) {
-            return { lat: currentUser.lat, lng: currentUser.lng };
-        }
+        if (currentUser && currentUser.lat && currentUser.lng) return { lat: currentUser.lat, lng: currentUser.lng };
         return null;
     }
 
@@ -156,6 +165,24 @@
         currentUserId = id;
         localStorage.setItem('sport_current_user_id', id);
     }
+
+    function showBioModal(name, bio) {
+        if (!bio) {
+            alert("У этого пользователя нет подробного описания.");
+            return;
+        }
+        document.getElementById('modalName').innerText = name;
+        document.getElementById('modalBio').innerText = bio;
+        document.getElementById('bioModal').style.display = 'flex';
+    }
+
+    document.getElementById('closeModalBtn').onclick = () => {
+        document.getElementById('bioModal').style.display = 'none';
+    };
+    window.onclick = (e) => {
+        const modal = document.getElementById('bioModal');
+        if (e.target === modal) modal.style.display = 'none';
+    };
 
     function subscribeUsers() {
         db.collection('users').onSnapshot(snapshot => {
@@ -196,20 +223,19 @@
             else sportEmoji = '🤸';
             const contactHtml = user.contact ? `<div class="contact-info">📞 ${escapeHtml(user.contact)}</div>` : '';
             const copyBtn = user.contact ? `<button class="chat-btn btn-copy" data-contact="${escapeHtml(user.contact)}">📋 Копировать контакт</button>` : '';
-            // Расстояние
             let distanceHtml = '';
             if (myCoords && user.lat && user.lng) {
                 const distKm = haversineDistance(myCoords.lat, myCoords.lng, user.lat, user.lng);
                 distanceHtml = `<span class="distance-badge">📏 ${formatDistance(distKm)}</span>`;
             }
-            // Кнопка удаления - только для своего профиля
             const deleteBtn = (currentUserId === user.id) ? `<button class="chat-btn" style="background:#dc3545;" data-id="${user.id}">❌ Удалить</button>` : '';
+            const bioBtn = `<button class="chat-btn bio-btn" data-name="${escapeHtml(user.name)}" data-bio="${escapeHtml(user.bio || '')}">📖 О себе</button>`;
             
             const div = document.createElement('div');
             div.className = 'user-item';
             div.innerHTML = `
                 <div class="user-info">
-                    <strong>${escapeHtml(user.name)}</strong>, ${user.age} лет   ${sportEmoji} ${user.sport}
+                    <strong>${escapeHtml(user.name)}</strong>, ${user.age} лет   ${sportEmoji} ${user.sport}
                     ${distanceHtml}
                     ${contactHtml}
                     <div>📍 ${user.lat.toFixed(4)}, ${user.lng.toFixed(4)}</div>
@@ -217,6 +243,7 @@
                 <div style="display:flex; gap:6px; flex-wrap:wrap;">
                     <button class="chat-btn" data-lat="${user.lat}" data-lng="${user.lng}" data-name="${escapeHtml(user.name)}">🗺️ Показать</button>
                     ${copyBtn}
+                    ${bioBtn}
                     ${deleteBtn}
                 </div>
             `;
@@ -237,6 +264,14 @@
                 if (contact) navigator.clipboard.writeText(contact).then(() => alert('Контакт скопирован')).catch(() => alert('Ошибка'));
             });
         });
+        document.querySelectorAll('.bio-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const name = btn.dataset.name;
+                const bio = btn.dataset.bio;
+                showBioModal(name, bio);
+            });
+        });
         document.querySelectorAll('.chat-btn[data-id]').forEach(btn => {
             btn.addEventListener('click', async (e) => {
                 if (confirm('Удалить свой профиль? Это действие нельзя отменить.')) {
@@ -244,7 +279,6 @@
                     if (userId === currentUserId) {
                         try {
                             await db.collection('users').doc(userId).delete();
-                            // Также удаляем все сообщения этого пользователя (по желанию)
                             const batch = db.batch();
                             const userMessages = messages.filter(m => m.user_id === userId);
                             userMessages.forEach(msg => {
@@ -255,7 +289,7 @@
                             localStorage.removeItem('sport_current_user_id');
                             currentUserId = null;
                             alert('Ваш профиль и сообщения удалены.');
-                            window.location.reload(); // простая перезагрузка
+                            window.location.reload();
                         } catch(e) {
                             console.error(e);
                             alert('Ошибка при удалении');
@@ -293,13 +327,28 @@
         users.forEach(user => {
             let m = L.marker([user.lat, user.lng]).addTo(map);
             let contactText = user.contact ? `\n📞 ${user.contact}` : '';
-            m.bindPopup(`<b>${escapeHtml(user.name)}</b> (${user.age})<br>${user.sport}${contactText}`);
+            let bioPreview = user.bio ? `\n📖 ${user.bio.substring(0, 60)}${user.bio.length > 60 ? '…' : ''}` : '';
+            m.bindPopup(`
+                <b>${escapeHtml(user.name)}</b> (${user.age})<br>
+                ${user.sport}${contactText}${bioPreview}<br>
+                <button id="popupBioBtn_${user.id}" style="margin-top:5px; padding:4px 8px; background:#0d6efd; color:white; border:none; border-radius:20px;">📖 Подробнее</button>
+            `);
+            m.on('popupopen', () => {
+                const btn = document.getElementById(`popupBioBtn_${user.id}`);
+                if (btn) {
+                    btn.onclick = (e) => {
+                        e.stopPropagation();
+                        showBioModal(user.name, user.bio || '');
+                        map.closePopup();
+                    };
+                }
+            });
             markers.push(m);
         });
     }
 
     function escapeHtml(str) {
-        if(!str) return '';
+        if (!str) return '';
         return str.replace(/[&<>]/g, m => m === '&' ? '&amp;' : m === '<' ? '&lt;' : '&gt;');
     }
 
@@ -339,6 +388,7 @@
         let age = document.getElementById('userAge').value;
         let sport = document.getElementById('userSport').value;
         let contact = document.getElementById('userContact').value.trim();
+        let bio = document.getElementById('userBio').value.trim();
         if (!name || !age || !selectedLat || !selectedLng) {
             alert('Заполните имя, возраст и выберите место на карте');
             return;
@@ -352,6 +402,7 @@
             age: parseInt(age),
             sport: sport,
             contact: contact,
+            bio: bio,
             lat: selectedLat,
             lng: selectedLng,
             created_at: Date.now()
@@ -364,6 +415,7 @@
             document.getElementById('userName').value = '';
             document.getElementById('userAge').value = '';
             document.getElementById('userContact').value = '';
+            document.getElementById('userBio').value = '';
             if (currentMarker) map.removeLayer(currentMarker);
             currentMarker = null;
         } catch (e) {
@@ -420,17 +472,16 @@
         }
     };
 
-    // Обновить расстояния (принудительно, если изменилась геопозиция)
+    // Обновить расстояния
     document.getElementById('refreshDistBtn').onclick = () => {
         if (!currentUserId) {
             alert('Вы не добавили себя. Расстояния будут считаться после добавления.');
             return;
         }
-        // просто перерисовываем список
         renderUsersList();
     };
 
-    // Геолокация для карты
+    // Геолокация
     const locBtn = document.createElement('button');
     locBtn.innerText = '📍 Моё местоположение';
     locBtn.className = 'btn btn-secondary';
