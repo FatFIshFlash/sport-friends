@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-    <title>Спорт вместе | СЗАО и Химки</title>
+    <title>Спорт вместе | СЗАО и Химки · рейтинг</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
@@ -24,19 +24,21 @@
         .btn-outline { background: white; border: 1px solid #1e7e34; color: #1e7e34; }
         .flex-buttons { display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
         .user-list, .message-list { max-height: 300px; overflow-y: auto; margin-bottom: 12px; }
-        .user-item, .message-item { background: #f8f9fa; border-radius: 16px; padding: 10px; margin-bottom: 8px; }
+        .user-item, .message-item { background: #f8f9fa; border-radius: 16px; padding: 10px; margin-bottom: 8px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+        .user-info { flex: 2; }
         .user-info strong { font-size: 1rem; }
         .user-info div { font-size: 0.75rem; color: #555; }
         .contact-info { font-size: 0.7rem; background: #e9ecef; display: inline-block; padding: 2px 8px; border-radius: 20px; margin-top: 4px; }
         .distance-badge { font-size: 0.7rem; background: #cfe2ff; display: inline-block; padding: 2px 8px; border-radius: 20px; margin-left: 6px; }
         .last-seen { font-size: 0.65rem; color: #6c757d; margin-left: 6px; }
+        .rating-badge { font-size: 0.7rem; background: #ffc107; display: inline-block; padding: 2px 8px; border-radius: 20px; margin-left: 6px; }
         .chat-btn { background: #0d6efd; border: none; color: white; padding: 4px 10px; border-radius: 30px; font-size: 0.7rem; cursor: pointer; margin: 2px; }
         .btn-copy { background: #28a745; }
+        .btn-thanks { background: #ffc107; color: black; }
         .message-text { background: white; padding: 8px; border-radius: 12px; margin: 5px 0; border-left: 3px solid #1e7e34; }
         .message-meta { font-size: 0.65rem; color: #6c757d; margin-bottom: 4px; }
         .add-panel, .message-panel { background: #e9ecef; border-radius: 20px; padding: 12px; margin-top: 12px; display: none; }
         .add-panel input, .add-panel select, .add-panel textarea, .message-panel textarea { width: 100%; padding: 8px; margin: 6px 0; border-radius: 16px; border: 1px solid #ccc; font-family: inherit; }
-        .message-panel textarea { border-radius: 16px; resize: vertical; }
         .warning { font-size: 0.7rem; color: #6c757d; text-align: center; margin-top: 8px; }
         footer { background: #fff3cd; border-radius: 16px; padding: 12px; margin-top: 20px; color: #856404; }
         .leaflet-control-attribution { display: none; }
@@ -44,11 +46,11 @@
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000; }
         .modal-content { background: white; max-width: 350px; width: 80%; border-radius: 20px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
         .help-btn { position: fixed; bottom: 20px; right: 20px; background: #1e7e34; color: white; border-radius: 50px; padding: 10px 16px; font-size: 0.9rem; box-shadow: 0 2px 8px rgba(0,0,0,0.2); cursor: pointer; z-index: 1000; }
-        @media (max-width: 700px) { .two-columns { flex-direction: column; } .help-btn { bottom: 10px; right: 10px; padding: 6px 12px; } }
+        @media (max-width: 700px) { .two-columns { flex-direction: column; } .help-btn { bottom: 10px; right: 10px; } .user-item { flex-direction: column; align-items: flex-start; } }
     </style>
 </head>
 <body>
-<header>🏃‍♂️ Спорт вместе | СЗАО и Химки · ищи напарника рядом</header>
+<header>🏃‍♂️ Спорт вместе | СЗАО и Химки · рейтинг</header>
 <div class="container">
     <div class="two-columns">
         <div class="left-col">
@@ -123,6 +125,7 @@
         <p>4. Чтобы договориться о встрече, напишите сообщение в общую ленту или скопируйте контакт человека.</p>
         <p>5. Расстояние до других людей считается автоматически от вашей точки на карте.</p>
         <p>6. Удалить свой профиль можно только через кнопку «Удалить» рядом с вашим именем.</p>
+        <p>7. Поблагодарить за встречу можно кнопкой «🙌 Спасибо».</p>
         <button class="btn btn-secondary" id="closeHelpBtn">Понятно</button>
     </div>
 </div>
@@ -130,7 +133,6 @@
 <div class="help-btn" id="showHelpBtn">❓ Помощь</div>
 
 <script>
-    // ========== FIREBASE ==========
     const firebaseConfig = {
         apiKey: "AIzaSyBS7zOIjcXrR5Ti1dDifqOlKWe4HYNLrSg",
         authDomain: "sport-friends-rus.firebaseapp.com",
@@ -147,10 +149,10 @@
     let currentUserDocId = null;
     let users = [];
     let messages = [];
+    let thanks = [];
     let markers = [];
     let map;
 
-    // Анонимная аутентификация
     auth.signInAnonymously().catch(err => console.error("Ошибка аутентификации:", err));
     auth.onAuthStateChanged(async (user) => {
         if (user) {
@@ -159,7 +161,6 @@
             if (!snapshot.empty) {
                 currentUserDocId = snapshot.docs[0].id;
                 localStorage.setItem('sport_current_user_docid', currentUserDocId);
-                // Обновляем last_seen
                 await db.collection('users').doc(currentUserDocId).update({ last_seen: Date.now() });
             } else {
                 currentUserDocId = null;
@@ -169,27 +170,13 @@
         }
     });
 
-    // Инициализация карты с границами СЗАО + Химки
     const southWest = L.latLng(55.700, 37.280);
     const northEast = L.latLng(55.950, 37.580);
     const bounds = L.latLngBounds(southWest, northEast);
-    map = L.map('map', {
-        maxBounds: bounds,
-        maxBoundsViscosity: 1.0,
-        minZoom: 11,
-        maxZoom: 18
-    }).setView([55.827, 37.438], 13);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap',
-        subdomains: 'abc',
-        maxZoom: 19
-    }).addTo(map);
-    setTimeout(() => {
-        let att = document.querySelector('.leaflet-control-attribution');
-        if(att) att.style.display = 'none';
-    }, 100);
+    map = L.map('map', { maxBounds: bounds, maxBoundsViscosity: 1.0, minZoom: 11, maxZoom: 18 }).setView([55.827, 37.438], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap', subdomains: 'abc', maxZoom: 19 }).addTo(map);
+    setTimeout(() => { let att = document.querySelector('.leaflet-control-attribution'); if(att) att.style.display = 'none'; }, 100);
 
-    // Функции расстояния
     function haversineDistance(lat1, lon1, lat2, lon2) {
         const R = 6371;
         const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -198,400 +185,69 @@
         const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
         return R * c;
     }
-    function formatDistance(km) {
-        if (km < 0.1) return `${Math.round(km * 1000)} м`;
-        return `${km.toFixed(1)} км`;
-    }
+    function formatDistance(km) { if (km < 0.1) return `${Math.round(km * 1000)} м`; return `${km.toFixed(1)} км`; }
+    function getCurrentUserCoords() { const u = users.find(u => u.id === currentUserDocId); return u && u.lat ? { lat: u.lat, lng: u.lng } : null; }
+    function formatLastSeen(ts) { if (!ts) return "неизвестно"; const m = Math.floor((Date.now()-ts)/60000); if(m<1) return "только что"; if(m<60) return `${m} мин назад`; const h = Math.floor(m/60); if(h<24) return `${h} ч назад`; return `${Math.floor(h/24)} дн назад`; }
+    async function updateLastSeen() { if(currentUserDocId) await db.collection('users').doc(currentUserDocId).update({ last_seen: Date.now() }); }
 
-    function getCurrentUserCoords() {
-        const currentUser = users.find(u => u.id === currentUserDocId);
-        if (currentUser && currentUser.lat && currentUser.lng) return { lat: currentUser.lat, lng: currentUser.lng };
-        return null;
-    }
-
-    function formatLastSeen(timestamp) {
-        if (!timestamp) return "неизвестно";
-        const diff = Date.now() - timestamp;
-        const minutes = Math.floor(diff / 60000);
-        const hours = Math.floor(minutes / 60);
-        const days = Math.floor(hours / 24);
-        if (minutes < 1) return "только что";
-        if (minutes < 60) return `${minutes} мин назад`;
-        if (hours < 24) return `${hours} ч назад`;
-        return `${days} дн назад`;
-    }
-
-    // Обновление last_seen при действии
-    async function updateLastSeen() {
-        if (currentUserDocId) {
-            await db.collection('users').doc(currentUserDocId).update({ last_seen: Date.now() });
-        }
-    }
-
-    // Подписки
-    function loadData() {
-        subscribeUsers();
-        subscribeMessages();
-        // Показать инструкцию при первом посещении
-        if (!localStorage.getItem('help_shown')) {
-            setTimeout(() => {
-                document.getElementById('helpModal').style.display = 'flex';
-                localStorage.setItem('help_shown', 'true');
-            }, 1000);
-        }
-    }
-
-    function subscribeUsers() {
-        db.collection('users').onSnapshot(snapshot => {
-            users = [];
-            snapshot.forEach(doc => {
-                users.push({ id: doc.id, ...doc.data() });
-            });
-            if (currentUserId) {
-                const found = users.find(u => u.uid === currentUserId);
-                if (found) currentUserDocId = found.id;
-                else currentUserDocId = null;
-            }
-            renderUsersList();
-            renderMarkers();
-        });
-    }
-
-    function subscribeMessages() {
-        db.collection('messages').orderBy('timestamp', 'asc').onSnapshot(snapshot => {
-            messages = [];
-            snapshot.forEach(doc => {
-                messages.push({ id: doc.id, ...doc.data() });
-            });
-            renderMessages();
-        });
-    }
+    function loadData() { subscribeUsers(); subscribeMessages(); subscribeThanks(); if(!localStorage.getItem('help_shown')){ setTimeout(()=>{ document.getElementById('helpModal').style.display='flex'; localStorage.setItem('help_shown','true'); },1000); } }
+    function subscribeUsers() { db.collection('users').onSnapshot(snapshot => { users=[]; snapshot.forEach(d=>users.push({id:d.id,...d.data()})); if(currentUserId){ const f=users.find(u=>u.uid===currentUserId); currentUserDocId=f?f.id:null; } renderUsersList(); renderMarkers(); }); }
+    function subscribeMessages() { db.collection('messages').orderBy('timestamp','asc').onSnapshot(s=>{ messages=[]; s.forEach(d=>messages.push({id:d.id,...d.data()})); renderMessages(); }); }
+    function subscribeThanks() { db.collection('thanks').onSnapshot(s=>{ thanks=[]; s.forEach(d=>thanks.push(d.data())); renderUsersList(); }); }
+    async function addThanks(toUid) { if(!currentUserId || currentUserId===toUid) return; if(thanks.find(t=>t.fromUid===currentUserId && t.toUid===toUid)){ alert("Вы уже благодарили этого человека."); return; } try{ await db.collection('thanks').add({ fromUid: currentUserId, toUid, timestamp: Date.now() }); alert("Спасибо! Рейтинг повышен."); } catch(e){ console.error(e); alert("Ошибка"); } }
+    function getThanksCount(uid) { return thanks.filter(t=>t.toUid===uid).length; }
 
     function renderUsersList() {
         const container = document.getElementById('usersList');
-        if (!users.length) {
-            container.innerHTML = '<div style="text-align:center; padding:20px;">👋 Пока никого нет. Добавьте себя!</div>';
-            return;
-        }
-        container.innerHTML = '';
+        if(!users.length){ container.innerHTML='<div style="text-align:center; padding:20px;">👋 Пока никого нет. Добавьте себя!</div>'; return; }
+        container.innerHTML='';
         const myCoords = getCurrentUserCoords();
         users.forEach(user => {
-            let sportEmoji = '🏋️';
-            if (user.sport.includes('бег')) sportEmoji = '🏃';
-            else if (user.sport.includes('турник')) sportEmoji = '💪';
-            else if (user.sport.includes('вело')) sportEmoji = '🚲';
-            else if (user.sport.includes('йога')) sportEmoji = '🧘';
-            else if (user.sport.includes('футбол')) sportEmoji = '⚽';
-            else sportEmoji = '🤸';
+            const thanksCount = getThanksCount(user.uid);
+            const isMe = (user.uid === currentUserId);
+            let sportEmoji = '🏋️'; if(user.sport.includes('бег')) sportEmoji='🏃'; else if(user.sport.includes('турник')) sportEmoji='💪'; else if(user.sport.includes('вело')) sportEmoji='🚲'; else if(user.sport.includes('йога')) sportEmoji='🧘'; else if(user.sport.includes('футбол')) sportEmoji='⚽';
             const contactHtml = user.contact ? `<div class="contact-info">📞 ${escapeHtml(user.contact)}</div>` : '';
             const copyBtn = user.contact ? `<button class="chat-btn btn-copy" data-contact="${escapeHtml(user.contact)}">📋 Копировать контакт</button>` : '';
-            let distanceHtml = '';
-            if (myCoords && user.lat && user.lng) {
-                const distKm = haversineDistance(myCoords.lat, myCoords.lng, user.lat, user.lng);
-                distanceHtml = `<span class="distance-badge">📏 ${formatDistance(distKm)}</span>`;
-            }
+            let distanceHtml = ''; if(myCoords && user.lat) { const d = haversineDistance(myCoords.lat, myCoords.lng, user.lat, user.lng); distanceHtml = `<span class="distance-badge">📏 ${formatDistance(d)}</span>`; }
             const lastSeenHtml = `<span class="last-seen">🕒 был(а) ${formatLastSeen(user.last_seen)}</span>`;
-            const deleteBtn = (user.uid === currentUserId) ? `<button class="chat-btn" style="background:#dc3545;" data-id="${user.id}">❌ Удалить</button>` : '';
-            const bioBtn = `<button class="chat-btn bio-btn" data-name="${escapeHtml(user.name)}" data-bio="${escapeHtml(user.bio || '')}">📖 О себе</button>`;
-            const div = document.createElement('div');
-            div.className = 'user-item';
-            div.innerHTML = `
-                <div class="user-info">
-                    <strong>${escapeHtml(user.name)}</strong>, ${user.age} лет   ${sportEmoji} ${user.sport}
-                    ${distanceHtml}
-                    ${lastSeenHtml}
-                    ${contactHtml}
-                    <div>📍 ${user.lat.toFixed(4)}, ${user.lng.toFixed(4)}</div>
-                </div>
-                <div style="display:flex; gap:6px; flex-wrap:wrap;">
-                    <button class="chat-btn" data-lat="${user.lat}" data-lng="${user.lng}" data-name="${escapeHtml(user.name)}">🗺️ Показать</button>
-                    ${copyBtn}
-                    ${bioBtn}
-                    ${deleteBtn}
-                </div>
-            `;
+            const ratingHtml = `<span class="rating-badge">🙌 ${thanksCount}</span>`;
+            const deleteBtn = isMe ? `<button class="chat-btn" style="background:#dc3545;" data-id="${user.id}">❌ Удалить</button>` : '';
+            const bioBtn = `<button class="chat-btn bio-btn" data-name="${escapeHtml(user.name)}" data-bio="${escapeHtml(user.bio||'')}">📖 О себе</button>`;
+            const thanksBtn = !isMe ? `<button class="chat-btn btn-thanks thanks-btn" data-uid="${user.uid}">🙌 Спасибо</button>` : '';
+            const div = document.createElement('div'); div.className='user-item';
+            div.innerHTML = `<div class="user-info"><strong>${escapeHtml(user.name)}</strong>, ${user.age} лет ${sportEmoji} ${user.sport} ${distanceHtml} ${lastSeenHtml} ${ratingHtml}${contactHtml}<div>📍 ${user.lat.toFixed(4)}, ${user.lng.toFixed(4)}</div></div><div style="display:flex; gap:6px; flex-wrap:wrap;"><button class="chat-btn" data-lat="${user.lat}" data-lng="${user.lng}" data-name="${escapeHtml(user.name)}">🗺️ Показать</button>${copyBtn}${bioBtn}${thanksBtn}${deleteBtn}</div>`;
             container.appendChild(div);
         });
-        // Обработчики
-        document.querySelectorAll('.chat-btn[data-lat]').forEach(btn => {
-            btn.addEventListener('click', () => {
-                let lat = parseFloat(btn.dataset.lat), lng = parseFloat(btn.dataset.lng), name = btn.dataset.name;
-                map.setView([lat, lng], 15);
-                L.popup().setLatLng([lat, lng]).setContent(`📍 ${name}`).openOn(map);
-            });
-        });
-        document.querySelectorAll('.btn-copy').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                let contact = btn.dataset.contact;
-                if (contact) navigator.clipboard.writeText(contact).then(() => alert('Контакт скопирован')).catch(() => alert('Ошибка'));
-            });
-        });
-        document.querySelectorAll('.bio-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const name = btn.dataset.name;
-                const bio = btn.dataset.bio;
-                showBioModal(name, bio);
-            });
-        });
-        document.querySelectorAll('.chat-btn[data-id]').forEach(btn => {
-            btn.addEventListener('click', async (e) => {
-                if (confirm('Удалить свой профиль? Это действие нельзя отменить.')) {
-                    const docId = btn.dataset.id;
-                    const userToDelete = users.find(u => u.id === docId);
-                    if (userToDelete && userToDelete.uid === currentUserId) {
-                        try {
-                            await db.collection('users').doc(docId).delete();
-                            const batch = db.batch();
-                            const userMessages = messages.filter(m => m.uid === currentUserId);
-                            userMessages.forEach(msg => {
-                                const msgRef = db.collection('messages').doc(msg.id);
-                                batch.delete(msgRef);
-                            });
-                            await batch.commit();
-                            alert('Ваш профиль и сообщения удалены.');
-                            window.location.reload();
-                        } catch(e) {
-                            console.error(e);
-                            alert('Ошибка при удалении');
-                        }
-                    } else {
-                        alert('Вы можете удалить только свой профиль.');
-                    }
-                }
-            });
-        });
+        document.querySelectorAll('.chat-btn[data-lat]').forEach(btn=>btn.addEventListener('click',()=>{ let lat=parseFloat(btn.dataset.lat), lng=parseFloat(btn.dataset.lng), name=btn.dataset.name; map.setView([lat,lng],15); L.popup().setLatLng([lat,lng]).setContent(`📍 ${name}`).openOn(map); }));
+        document.querySelectorAll('.btn-copy').forEach(btn=>btn.addEventListener('click',(e)=>{ e.stopPropagation(); let contact=btn.dataset.contact; if(contact) navigator.clipboard.writeText(contact).then(()=>alert('Контакт скопирован')).catch(()=>alert('Ошибка')); }));
+        document.querySelectorAll('.bio-btn').forEach(btn=>btn.addEventListener('click',(e)=>{ e.stopPropagation(); showBioModal(btn.dataset.name, btn.dataset.bio); }));
+        document.querySelectorAll('.thanks-btn').forEach(btn=>btn.addEventListener('click',(e)=>{ e.stopPropagation(); addThanks(btn.dataset.uid); }));
+        document.querySelectorAll('.chat-btn[data-id]').forEach(btn=>btn.addEventListener('click',async(e)=>{ if(confirm('Удалить свой профиль?')){ const id=btn.dataset.id; const u=users.find(u=>u.id===id); if(u && u.uid===currentUserId){ try{ await db.collection('users').doc(id).delete(); const batch=db.batch(); messages.filter(m=>m.uid===currentUserId).forEach(msg=>batch.delete(db.collection('messages').doc(msg.id))); await batch.commit(); alert('Профиль удалён'); window.location.reload(); }catch(e){ alert('Ошибка'); } }else alert('Можно удалить только свой профиль'); } }));
     }
+    function renderMessages() { const container=document.getElementById('messageList'); if(!messages.length){ container.innerHTML='<div style="text-align:center; padding:20px;">💬 Пока нет сообщений. Напишите первое!</div>'; return; } container.innerHTML=''; messages.forEach(msg=>{ const date=new Date(msg.timestamp).toLocaleString(); const div=document.createElement('div'); div.className='message-item'; div.innerHTML=`<div class="message-meta"><strong>${escapeHtml(msg.user_name)}</strong> · ${date}</div><div class="message-text">${escapeHtml(msg.text)}</div>`; container.appendChild(div); }); }
+    function renderMarkers() { markers.forEach(m=>map.removeLayer(m)); markers=[]; users.forEach(user=>{ let popup=`<b>${escapeHtml(user.name)}</b> (${user.age})<br>${user.sport}`; if(user.contact) popup+=`<br>📞 ${user.contact}`; if(user.bio) popup+=`<br>📖 ${user.bio.substring(0,80)}...`; popup+=`<br><button id="popupBioBtn_${user.id}" style="margin-top:5px; padding:4px 8px; background:#0d6efd; color:white; border:none; border-radius:20px;">📖 Подробнее</button>`; let m=L.marker([user.lat,user.lng]).addTo(map); m.bindPopup(popup); m.on('popupopen',()=>{ let btn=document.getElementById(`popupBioBtn_${user.id}`); if(btn) btn.onclick=(e)=>{ e.stopPropagation(); showBioModal(user.name, user.bio||''); map.closePopup(); }; }); markers.push(m); }); }
+    function showBioModal(name,bio){ if(!bio){ alert("Нет описания"); return; } document.getElementById('modalName').innerText=name; document.getElementById('modalBio').innerText=bio; document.getElementById('bioModal').style.display='flex'; }
+    function escapeHtml(str){ if(!str) return ''; return str.replace(/[&<>]/g, m=> m==='&' ? '&amp;' : m==='<' ? '&lt;' : '&gt;'); }
 
-    function renderMessages() {
-        const container = document.getElementById('messageList');
-        if (!messages.length) {
-            container.innerHTML = '<div style="text-align:center; padding:20px;">💬 Пока нет сообщений. Напишите первое!</div>';
-            return;
-        }
-        container.innerHTML = '';
-        messages.forEach(msg => {
-            const date = new Date(msg.timestamp).toLocaleString();
-            const div = document.createElement('div');
-            div.className = 'message-item';
-            div.innerHTML = `
-                <div class="message-meta"><strong>${escapeHtml(msg.user_name)}</strong> · ${date}</div>
-                <div class="message-text">${escapeHtml(msg.text)}</div>
-            `;
-            container.appendChild(div);
-        });
-    }
-
-    function renderMarkers() {
-        markers.forEach(m => map.removeLayer(m));
-        markers = [];
-        users.forEach(user => {
-            let m = L.marker([user.lat, user.lng]).addTo(map);
-            let contactText = user.contact ? `\n📞 ${user.contact}` : '';
-            let bioPreview = user.bio ? `\n📖 ${user.bio.substring(0, 60)}${user.bio.length > 60 ? '…' : ''}` : '';
-            m.bindPopup(`
-                <b>${escapeHtml(user.name)}</b> (${user.age})<br>
-                ${user.sport}${contactText}${bioPreview}<br>
-                <button id="popupBioBtn_${user.id}" style="margin-top:5px; padding:4px 8px; background:#0d6efd; color:white; border:none; border-radius:20px;">📖 Подробнее</button>
-            `);
-            m.on('popupopen', () => {
-                const btn = document.getElementById(`popupBioBtn_${user.id}`);
-                if (btn) {
-                    btn.onclick = (e) => {
-                        e.stopPropagation();
-                        showBioModal(user.name, user.bio || '');
-                        map.closePopup();
-                    };
-                }
-            });
-            markers.push(m);
-        });
-    }
-
-    function showBioModal(name, bio) {
-        if (!bio) {
-            alert("У этого пользователя нет подробного описания.");
-            return;
-        }
-        document.getElementById('modalName').innerText = name;
-        document.getElementById('modalBio').innerText = bio;
-        document.getElementById('bioModal').style.display = 'flex';
-    }
-
-    function escapeHtml(str) {
-        if (!str) return '';
-        return str.replace(/[&<>]/g, m => m === '&' ? '&amp;' : m === '<' ? '&lt;' : '&gt;');
-    }
-
-    // Добавление пользователя
-    let selectedLat = null, selectedLng = null, currentMarker = null;
-    let addingMode = false;
-    function enableAddingMode() {
-        if (!currentUserId) {
-            alert("Подождите, идёт вход... Попробуйте через пару секунд.");
-            return;
-        }
-        addingMode = true;
-        document.getElementById('addPanel').style.display = 'block';
-        document.getElementById('addMeBtn').style.display = 'none';
-        if (currentMarker) map.removeLayer(currentMarker);
-        selectedLat = null; selectedLng = null;
-        document.getElementById('coordInfo').innerText = '📍 Кликните на карте, чтобы выбрать место';
-        map.off('click');
-        map.on('click', (e) => {
-            if (!addingMode) return;
-            selectedLat = e.latlng.lat;
-            selectedLng = e.latlng.lng;
-            if (currentMarker) map.removeLayer(currentMarker);
-            currentMarker = L.marker([selectedLat, selectedLng]).addTo(map);
-            currentMarker.bindPopup('📍 Ваше место').openPopup();
-            document.getElementById('coordInfo').innerText = `✅ Место: ${selectedLat.toFixed(5)}, ${selectedLng.toFixed(5)}`;
-        });
-    }
-    function disableAddingMode() {
-        addingMode = false;
-        document.getElementById('addPanel').style.display = 'none';
-        document.getElementById('addMeBtn').style.display = 'block';
-        if (currentMarker) map.removeLayer(currentMarker);
-        map.off('click');
-        selectedLat = null;
-    }
-    document.getElementById('addMeBtn').onclick = enableAddingMode;
-    document.getElementById('cancelAddBtn').onclick = disableAddingMode;
-    document.getElementById('saveUserBtn').onclick = async () => {
-        let name = document.getElementById('userName').value.trim();
-        let age = document.getElementById('userAge').value;
-        let sport = document.getElementById('userSport').value;
-        let contact = document.getElementById('userContact').value.trim();
-        let bio = document.getElementById('userBio').value.trim();
-        if (!name || !age || !selectedLat || !selectedLng) {
-            alert('Заполните имя, возраст и выберите место на карте');
-            return;
-        }
-        if (isNaN(age) || age < 14 || age > 100) {
-            alert('Возраст от 14 до 100');
-            return;
-        }
-        if (!currentUserId) {
-            alert("Ошибка входа. Перезагрузите страницу.");
-            return;
-        }
-        const newUser = {
-            uid: currentUserId,
-            name: name,
-            age: parseInt(age),
-            sport: sport,
-            contact: contact,
-            bio: bio,
-            lat: selectedLat,
-            lng: selectedLng,
-            created_at: Date.now(),
-            last_seen: Date.now()
-        };
-        try {
-            const docRef = await db.collection('users').add(newUser);
-            currentUserDocId = docRef.id;
-            localStorage.setItem('sport_current_user_docid', currentUserDocId);
-            alert('Вы добавлены! Теперь можете писать сообщения.');
-            disableAddingMode();
-            document.getElementById('userName').value = '';
-            document.getElementById('userAge').value = '';
-            document.getElementById('userContact').value = '';
-            document.getElementById('userBio').value = '';
-            if (currentMarker) map.removeLayer(currentMarker);
-            currentMarker = null;
-        } catch (e) {
-            console.error(e);
-            alert('Ошибка при сохранении. Проверьте правила Firestore.');
-        }
-    };
-
-    // Отправка сообщения
-    let messageMode = false;
-    function enableMessageMode() {
-        if (!currentUserDocId) {
-            alert('Сначала добавьте себя на карту (кнопка «Добавить себя»).');
-            return;
-        }
-        messageMode = true;
-        document.getElementById('messagePanel').style.display = 'block';
-        document.getElementById('newMessageBtn').style.display = 'none';
-    }
-    function disableMessageMode() {
-        messageMode = false;
-        document.getElementById('messagePanel').style.display = 'none';
-        document.getElementById('newMessageBtn').style.display = 'block';
-        document.getElementById('messageText').value = '';
-    }
-    document.getElementById('newMessageBtn').onclick = enableMessageMode;
-    document.getElementById('cancelMsgBtn').onclick = disableMessageMode;
-    document.getElementById('sendMsgBtn').onclick = async () => {
-        let text = document.getElementById('messageText').value.trim();
-        if (!text) { alert('Введите текст сообщения'); return; }
-        if (!currentUserDocId) {
-            alert('Сначала добавьте себя на карту.');
-            return;
-        }
-        const currentUser = users.find(u => u.id === currentUserDocId);
-        if (!currentUser) {
-            alert('Ваш профиль не найден. Добавьте себя заново.');
-            return;
-        }
-        const newMsg = {
-            uid: currentUserId,
-            user_name: currentUser.name,
-            text: text,
-            timestamp: Date.now(),
-            lat: currentUser.lat,
-            lng: currentUser.lng
-        };
-        try {
-            await db.collection('messages').add(newMsg);
-            disableMessageMode();
-            await updateLastSeen();
-        } catch (e) {
-            console.error(e);
-            alert('Ошибка при отправке сообщения');
-        }
-    };
-
-    // Обновить расстояния
-    document.getElementById('refreshDistBtn').onclick = () => {
-        if (!currentUserDocId) {
-            alert('Вы не добавили себя. Расстояния будут считаться после добавления.');
-            return;
-        }
-        renderUsersList();
-        updateLastSeen();
-    };
-
-    // Геолокация
-    const locBtn = document.createElement('button');
-    locBtn.innerText = '📍 Моё местоположение';
-    locBtn.className = 'btn btn-secondary';
-    locBtn.style.marginTop = '8px';
-    document.querySelector('#map').after(locBtn);
-    locBtn.onclick = () => {
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(pos => {
-                map.setView([pos.coords.latitude, pos.coords.longitude], 15);
-                L.popup().setLatLng([pos.coords.latitude, pos.coords.longitude]).setContent('Вы здесь').openOn(map);
-            }, () => alert('Не удалось определить местоположение'));
-        } else alert('Геолокация не поддерживается');
-    };
-
-    // Модальные окна
-    document.getElementById('closeModalBtn').onclick = () => document.getElementById('bioModal').style.display = 'none';
-    window.onclick = (e) => {
-        if (e.target === document.getElementById('bioModal')) document.getElementById('bioModal').style.display = 'none';
-        if (e.target === document.getElementById('helpModal')) document.getElementById('helpModal').style.display = 'none';
-    };
-    document.getElementById('showHelpBtn').onclick = () => document.getElementById('helpModal').style.display = 'flex';
-    document.getElementById('closeHelpBtn').onclick = () => document.getElementById('helpModal').style.display = 'none';
-
-    // При каждом действии обновляем last_seen
-    setInterval(() => { if (currentUserDocId) updateLastSeen(); }, 60000); // раз в минуту
+    let selectedLat=null, selectedLng=null, currentMarker=null, addingMode=false;
+    function enableAddingMode(){ if(!currentUserId){ alert("Подождите вход..."); return; } addingMode=true; document.getElementById('addPanel').style.display='block'; document.getElementById('addMeBtn').style.display='none'; if(currentMarker) map.removeLayer(currentMarker); selectedLat=null; selectedLng=null; document.getElementById('coordInfo').innerText='📍 Кликните на карте'; map.off('click'); map.on('click',(e)=>{ if(!addingMode) return; selectedLat=e.latlng.lat; selectedLng=e.latlng.lng; if(currentMarker) map.removeLayer(currentMarker); currentMarker=L.marker([selectedLat,selectedLng]).addTo(map); currentMarker.bindPopup('📍 Ваше место').openPopup(); document.getElementById('coordInfo').innerText=`✅ Место: ${selectedLat.toFixed(5)}, ${selectedLng.toFixed(5)}`; }); }
+    function disableAddingMode(){ addingMode=false; document.getElementById('addPanel').style.display='none'; document.getElementById('addMeBtn').style.display='block'; if(currentMarker) map.removeLayer(currentMarker); map.off('click'); selectedLat=null; }
+    document.getElementById('addMeBtn').onclick=enableAddingMode;
+    document.getElementById('cancelAddBtn').onclick=disableAddingMode;
+    document.getElementById('saveUserBtn').onclick=async()=>{ let name=document.getElementById('userName').value.trim(); let age=document.getElementById('userAge').value; let sport=document.getElementById('userSport').value; let contact=document.getElementById('userContact').value.trim(); let bio=document.getElementById('userBio').value.trim(); if(!name||!age||!selectedLat||!selectedLng){ alert('Заполните имя, возраст и выберите место'); return; } if(isNaN(age)||age<14||age>100){ alert('Возраст от 14 до 100'); return; } if(!currentUserId){ alert('Ошибка входа'); return; } const newUser={ uid:currentUserId, name, age:parseInt(age), sport, contact, bio, lat:selectedLat, lng:selectedLng, created_at:Date.now(), last_seen:Date.now() }; try{ const docRef=await db.collection('users').add(newUser); currentUserDocId=docRef.id; localStorage.setItem('sport_current_user_docid',currentUserDocId); alert('Вы добавлены!'); disableAddingMode(); document.getElementById('userName').value=''; document.getElementById('userAge').value=''; document.getElementById('userContact').value=''; document.getElementById('userBio').value=''; if(currentMarker) map.removeLayer(currentMarker); currentMarker=null; }catch(e){ alert('Ошибка сохранения'); } };
+    let messageMode=false;
+    function enableMessageMode(){ if(!currentUserDocId){ alert('Сначала добавьте себя'); return; } messageMode=true; document.getElementById('messagePanel').style.display='block'; document.getElementById('newMessageBtn').style.display='none'; }
+    function disableMessageMode(){ messageMode=false; document.getElementById('messagePanel').style.display='none'; document.getElementById('newMessageBtn').style.display='block'; document.getElementById('messageText').value=''; }
+    document.getElementById('newMessageBtn').onclick=enableMessageMode;
+    document.getElementById('cancelMsgBtn').onclick=disableMessageMode;
+    document.getElementById('sendMsgBtn').onclick=async()=>{ let text=document.getElementById('messageText').value.trim(); if(!text){ alert('Введите текст'); return; } const curUser=users.find(u=>u.id===currentUserDocId); if(!curUser){ alert('Профиль не найден'); return; } try{ await db.collection('messages').add({ uid:currentUserId, user_name:curUser.name, text, timestamp:Date.now(), lat:curUser.lat, lng:curUser.lng }); disableMessageMode(); await updateLastSeen(); }catch(e){ alert('Ошибка'); } };
+    document.getElementById('refreshDistBtn').onclick=()=>{ if(!currentUserDocId){ alert('Добавьте себя'); return; } renderUsersList(); updateLastSeen(); };
+    const locBtn=document.createElement('button'); locBtn.innerText='📍 Моё местоположение'; locBtn.className='btn btn-secondary'; locBtn.style.marginTop='8px'; document.querySelector('#map').after(locBtn); locBtn.onclick=()=>{ if(navigator.geolocation){ navigator.geolocation.getCurrentPosition(pos=>{ map.setView([pos.coords.latitude,pos.coords.longitude],15); L.popup().setLatLng([pos.coords.latitude,pos.coords.longitude]).setContent('Вы здесь').openOn(map); },()=>alert('Не удалось')); }else alert('Не поддерживается'); };
+    document.getElementById('closeModalBtn').onclick=()=>document.getElementById('bioModal').style.display='none';
+    window.onclick=(e)=>{ if(e.target===document.getElementById('bioModal')) document.getElementById('bioModal').style.display='none'; if(e.target===document.getElementById('helpModal')) document.getElementById('helpModal').style.display='none'; };
+    document.getElementById('showHelpBtn').onclick=()=>document.getElementById('helpModal').style.display='flex';
+    document.getElementById('closeHelpBtn').onclick=()=>document.getElementById('helpModal').style.display='none';
+    setInterval(()=>{ if(currentUserDocId) updateLastSeen(); }, 60000);
 </script>
 </body>
 </html>
