@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-    <title>Спорт вместе - поиск напарников</title>
+    <title>Спорт вместе | СЗАО и Химки</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
@@ -29,6 +29,7 @@
         .user-info div { font-size: 0.75rem; color: #555; }
         .contact-info { font-size: 0.7rem; background: #e9ecef; display: inline-block; padding: 2px 8px; border-radius: 20px; margin-top: 4px; }
         .distance-badge { font-size: 0.7rem; background: #cfe2ff; display: inline-block; padding: 2px 8px; border-radius: 20px; margin-left: 6px; }
+        .last-seen { font-size: 0.65rem; color: #6c757d; margin-left: 6px; }
         .chat-btn { background: #0d6efd; border: none; color: white; padding: 4px 10px; border-radius: 30px; font-size: 0.7rem; cursor: pointer; margin: 2px; }
         .btn-copy { background: #28a745; }
         .message-text { background: white; padding: 8px; border-radius: 12px; margin: 5px 0; border-left: 3px solid #1e7e34; }
@@ -41,12 +42,13 @@
         .leaflet-control-attribution { display: none; }
         hr { margin: 12px 0; }
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000; }
-        .modal-content { background: white; max-width: 300px; width: 80%; border-radius: 20px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
-        @media (max-width: 700px) { .two-columns { flex-direction: column; } }
+        .modal-content { background: white; max-width: 350px; width: 80%; border-radius: 20px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+        .help-btn { position: fixed; bottom: 20px; right: 20px; background: #1e7e34; color: white; border-radius: 50px; padding: 10px 16px; font-size: 0.9rem; box-shadow: 0 2px 8px rgba(0,0,0,0.2); cursor: pointer; z-index: 1000; }
+        @media (max-width: 700px) { .two-columns { flex-direction: column; } .help-btn { bottom: 10px; right: 10px; padding: 6px 12px; } }
     </style>
 </head>
 <body>
-<header>🏃‍♂️ Спорт вместе · поиск напарников</header>
+<header>🏃‍♂️ Спорт вместе | СЗАО и Химки · ищи напарника рядом</header>
 <div class="container">
     <div class="two-columns">
         <div class="left-col">
@@ -64,8 +66,8 @@
                         <option value="футбол/игры">⚽ Футбол / командные</option>
                         <option value="другое">✨ Другое</option>
                     </select>
-                    <input type="text" id="userContact" placeholder="Контакт (телефон, email, соцсеть) - по желанию">
-                    <textarea id="userBio" rows="2" placeholder="О себе (подробно): например, «бегаю по вторникам и четвергам в 19:00 у пруда, темп 6 мин/км. Ищу компанию»"></textarea>
+                    <input type="text" id="userContact" placeholder="Контакт (телефон, email, соцсеть) — по желанию">
+                    <textarea id="userBio" rows="2" placeholder="О себе (подробно): например, «бегаю по вторникам и четвергам в 19:00 у причала, темп 6 мин/км. Ищу компанию»"></textarea>
                     <div id="coordInfo" class="selected-coord">📍 Кликните на карте, чтобы выбрать место</div>
                     <div class="flex-buttons">
                         <button class="btn btn-outline" id="cancelAddBtn">Отмена</button>
@@ -78,13 +80,13 @@
         </div>
         <div class="right-col">
             <div class="card">
-                <h3 style="margin:0 0 8px 0">👥 Люди</h3>
+                <h3 style="margin:0 0 8px 0">👥 Люди рядом</h3>
                 <div id="usersList" class="user-list">Загрузка...</div>
                 <h3 style="margin:16px 0 8px 0">💬 Лента сообщений</h3>
                 <div id="messageList" class="message-list"></div>
                 <button class="btn" id="newMessageBtn">✏️ Написать сообщение</button>
                 <div id="messagePanel" class="message-panel">
-                    <textarea id="messageText" rows="2" placeholder="Ваше сообщение... (например, «Бегаю завтра в 19:00 у стадиона, кто со мной?»)"></textarea>
+                    <textarea id="messageText" rows="2" placeholder="Ваше сообщение... (например, «Бегаю завтра в 19:00 у причала, кто со мной?»)"></textarea>
                     <div class="flex-buttons">
                         <button class="btn btn-outline" id="cancelMsgBtn">Отмена</button>
                         <button class="btn" id="sendMsgBtn">Отправить</button>
@@ -95,12 +97,12 @@
     </div>
     <footer>
         ⚠️ <strong>Важно для безопасности</strong><br>
-        Мы только помогаем найти компанию. Перед встречей обязательно:<br>
-        • Обменяйтесь фото в любом мессенджере (МАХ, VK и др.)<br>
+        Мы помогаем найти компанию, но ответственность за встречи лежит на вас.<br>
+        • Обменяйтесь фото в мессенджере перед встречей<br>
         • Встречайтесь в людных местах<br>
         • Сообщите друзьям, куда идёте<br>
-        • Если человек кажется подозрительным - не ходите на встречу<br>
-        <span style="font-size: 0.75rem;">Нажав «Добавить себя», вы соглашаетесь с этими правилами.</span>
+        • Если человек кажется подозрительным — не ходите на встречу<br>
+        <span style="font-size: 0.75rem;">Сайт создан для жителей СЗАО и Химок. Будьте вежливы.</span>
     </footer>
 </div>
 
@@ -112,8 +114,23 @@
     </div>
 </div>
 
+<div id="helpModal" class="modal">
+    <div class="modal-content">
+        <h4>📖 Как пользоваться сайтом</h4>
+        <p>1. Нажмите «Добавить себя на карту» и кликните на карте в том месте, где вы обычно тренируетесь.</p>
+        <p>2. Заполните имя, возраст, вид спорта. По желанию – контакт и подробное описание.</p>
+        <p>3. После сохранения вы появитесь в списке «Люди рядом» и на карте.</p>
+        <p>4. Чтобы договориться о встрече, напишите сообщение в общую ленту или скопируйте контакт человека.</p>
+        <p>5. Расстояние до других людей считается автоматически от вашей точки на карте.</p>
+        <p>6. Удалить свой профиль можно только через кнопку «Удалить» рядом с вашим именем.</p>
+        <button class="btn btn-secondary" id="closeHelpBtn">Понятно</button>
+    </div>
+</div>
+
+<div class="help-btn" id="showHelpBtn">❓ Помощь</div>
+
 <script>
-    // ========== ВАШИ ДАННЫЕ FIREBASE ==========
+    // ========== FIREBASE ==========
     const firebaseConfig = {
         apiKey: "AIzaSyBS7zOIjcXrR5Ti1dDifqOlKWe4HYNLrSg",
         authDomain: "sport-friends-rus.firebaseapp.com",
@@ -122,14 +139,12 @@
         messagingSenderId: "1087233318718",
         appId: "1:1087233318718:web:0bb5de93b39843b1c1566f"
     };
-    // =======================================
-
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
     const auth = firebase.auth();
 
-    let currentUserId = null;      // Firebase UID
-    let currentUserDocId = null;   // ID документа пользователя в коллекции users
+    let currentUserId = null;
+    let currentUserDocId = null;
     let users = [];
     let messages = [];
     let markers = [];
@@ -140,29 +155,30 @@
     auth.onAuthStateChanged(async (user) => {
         if (user) {
             currentUserId = user.uid;
-            console.log("Анонимный вход выполнен, UID:", currentUserId);
-            // Привязываем существующий профиль, если есть (по UID)
             const snapshot = await db.collection('users').where('uid', '==', currentUserId).get();
             if (!snapshot.empty) {
                 currentUserDocId = snapshot.docs[0].id;
                 localStorage.setItem('sport_current_user_docid', currentUserDocId);
+                // Обновляем last_seen
+                await db.collection('users').doc(currentUserDocId).update({ last_seen: Date.now() });
             } else {
                 currentUserDocId = null;
                 localStorage.removeItem('sport_current_user_docid');
             }
-            loadData(); // загружаем пользователей и сообщения
-        } else {
-            console.log("Не удалось войти анонимно");
+            loadData();
         }
     });
 
-    function loadData() {
-        subscribeUsers();
-        subscribeMessages();
-    }
-
-    // Карта
-    map = L.map('map').setView([55.7558, 37.6176], 12);
+    // Инициализация карты с границами СЗАО + Химки
+    const southWest = L.latLng(55.700, 37.280);
+    const northEast = L.latLng(55.950, 37.580);
+    const bounds = L.latLngBounds(southWest, northEast);
+    map = L.map('map', {
+        maxBounds: bounds,
+        maxBoundsViscosity: 1.0,
+        minZoom: 11,
+        maxZoom: 18
+    }).setView([55.827, 37.438], 13);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; OpenStreetMap',
         subdomains: 'abc',
@@ -173,6 +189,7 @@
         if(att) att.style.display = 'none';
     }, 100);
 
+    // Функции расстояния
     function haversineDistance(lat1, lon1, lat2, lon2) {
         const R = 6371;
         const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -181,7 +198,6 @@
         const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
         return R * c;
     }
-
     function formatDistance(km) {
         if (km < 0.1) return `${Math.round(km * 1000)} м`;
         return `${km.toFixed(1)} км`;
@@ -193,17 +209,37 @@
         return null;
     }
 
-    function showBioModal(name, bio) {
-        if (!bio) {
-            alert("У этого пользователя нет подробного описания.");
-            return;
-        }
-        document.getElementById('modalName').innerText = name;
-        document.getElementById('modalBio').innerText = bio;
-        document.getElementById('bioModal').style.display = 'flex';
+    function formatLastSeen(timestamp) {
+        if (!timestamp) return "неизвестно";
+        const diff = Date.now() - timestamp;
+        const minutes = Math.floor(diff / 60000);
+        const hours = Math.floor(minutes / 60);
+        const days = Math.floor(hours / 24);
+        if (minutes < 1) return "только что";
+        if (minutes < 60) return `${minutes} мин назад`;
+        if (hours < 24) return `${hours} ч назад`;
+        return `${days} дн назад`;
     }
-    document.getElementById('closeModalBtn').onclick = () => document.getElementById('bioModal').style.display = 'none';
-    window.onclick = (e) => { if (e.target === document.getElementById('bioModal')) document.getElementById('bioModal').style.display = 'none'; };
+
+    // Обновление last_seen при действии
+    async function updateLastSeen() {
+        if (currentUserDocId) {
+            await db.collection('users').doc(currentUserDocId).update({ last_seen: Date.now() });
+        }
+    }
+
+    // Подписки
+    function loadData() {
+        subscribeUsers();
+        subscribeMessages();
+        // Показать инструкцию при первом посещении
+        if (!localStorage.getItem('help_shown')) {
+            setTimeout(() => {
+                document.getElementById('helpModal').style.display = 'flex';
+                localStorage.setItem('help_shown', 'true');
+            }, 1000);
+        }
+    }
 
     function subscribeUsers() {
         db.collection('users').onSnapshot(snapshot => {
@@ -211,7 +247,6 @@
             snapshot.forEach(doc => {
                 users.push({ id: doc.id, ...doc.data() });
             });
-            // Обновляем currentUserDocId, если мы есть в списке
             if (currentUserId) {
                 const found = users.find(u => u.uid === currentUserId);
                 if (found) currentUserDocId = found.id;
@@ -255,16 +290,16 @@
                 const distKm = haversineDistance(myCoords.lat, myCoords.lng, user.lat, user.lng);
                 distanceHtml = `<span class="distance-badge">📏 ${formatDistance(distKm)}</span>`;
             }
-            // Кнопка удаления только если uid документа совпадает с текущим uid
+            const lastSeenHtml = `<span class="last-seen">🕒 был(а) ${formatLastSeen(user.last_seen)}</span>`;
             const deleteBtn = (user.uid === currentUserId) ? `<button class="chat-btn" style="background:#dc3545;" data-id="${user.id}">❌ Удалить</button>` : '';
             const bioBtn = `<button class="chat-btn bio-btn" data-name="${escapeHtml(user.name)}" data-bio="${escapeHtml(user.bio || '')}">📖 О себе</button>`;
-            
             const div = document.createElement('div');
             div.className = 'user-item';
             div.innerHTML = `
                 <div class="user-info">
                     <strong>${escapeHtml(user.name)}</strong>, ${user.age} лет   ${sportEmoji} ${user.sport}
                     ${distanceHtml}
+                    ${lastSeenHtml}
                     ${contactHtml}
                     <div>📍 ${user.lat.toFixed(4)}, ${user.lng.toFixed(4)}</div>
                 </div>
@@ -308,7 +343,6 @@
                     if (userToDelete && userToDelete.uid === currentUserId) {
                         try {
                             await db.collection('users').doc(docId).delete();
-                            // Удаляем все сообщения этого пользователя
                             const batch = db.batch();
                             const userMessages = messages.filter(m => m.uid === currentUserId);
                             userMessages.forEach(msg => {
@@ -373,6 +407,16 @@
             });
             markers.push(m);
         });
+    }
+
+    function showBioModal(name, bio) {
+        if (!bio) {
+            alert("У этого пользователя нет подробного описания.");
+            return;
+        }
+        document.getElementById('modalName').innerText = name;
+        document.getElementById('modalBio').innerText = bio;
+        document.getElementById('bioModal').style.display = 'flex';
     }
 
     function escapeHtml(str) {
@@ -442,7 +486,8 @@
             bio: bio,
             lat: selectedLat,
             lng: selectedLng,
-            created_at: Date.now()
+            created_at: Date.now(),
+            last_seen: Date.now()
         };
         try {
             const docRef = await db.collection('users').add(newUser);
@@ -504,6 +549,7 @@
         try {
             await db.collection('messages').add(newMsg);
             disableMessageMode();
+            await updateLastSeen();
         } catch (e) {
             console.error(e);
             alert('Ошибка при отправке сообщения');
@@ -517,6 +563,7 @@
             return;
         }
         renderUsersList();
+        updateLastSeen();
     };
 
     // Геолокация
@@ -533,6 +580,18 @@
             }, () => alert('Не удалось определить местоположение'));
         } else alert('Геолокация не поддерживается');
     };
+
+    // Модальные окна
+    document.getElementById('closeModalBtn').onclick = () => document.getElementById('bioModal').style.display = 'none';
+    window.onclick = (e) => {
+        if (e.target === document.getElementById('bioModal')) document.getElementById('bioModal').style.display = 'none';
+        if (e.target === document.getElementById('helpModal')) document.getElementById('helpModal').style.display = 'none';
+    };
+    document.getElementById('showHelpBtn').onclick = () => document.getElementById('helpModal').style.display = 'flex';
+    document.getElementById('closeHelpBtn').onclick = () => document.getElementById('helpModal').style.display = 'none';
+
+    // При каждом действии обновляем last_seen
+    setInterval(() => { if (currentUserDocId) updateLastSeen(); }, 60000); // раз в минуту
 </script>
 </body>
 </html>
